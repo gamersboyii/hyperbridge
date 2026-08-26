@@ -4,6 +4,16 @@ AI-maintained record of non-obvious choices made in `sdk/packages/indexer`: what
 
 Entry format: heading with the decision, then alternatives considered and the reasoning. Newest first.
 
+## 2026-08-26 — Substrate node resilience is fixed in a forked node image, not in the indexer
+
+Chosen: the substrate SubQuery node image comes from the `polytope-labs/subql` fork (`polytopelabs/subql-node-substrate`), where the websocket provider is wrapped so requests wait out a disconnect, response caching is disabled, reconnects are unbounded, and the http provider retries rate limits with a client-wide pause. The indexer package only changes the image reference.
+
+Alternative rejected — make the indexer tolerate it: retry handler RPC reads, lower `--workers`, rely on `restart: unless-stopped`. The exits come from inside the node (block fetcher and dispatcher), which handler code cannot reach, and a restart is not a reconnect: it drops the unfinalized cache and, under `--multi-chain`, forces a rewind. The rate limit on the hosted http RPC is per client, so per-call retries in handlers cannot coordinate with the node's own fetch traffic; only the provider can pause all of them.
+
+Alternative rejected — upstream the changes first and wait. Worth doing, but the deployment needs the behaviour now; the fork mirrors how `polytopelabs/subql-node-ethereum` is already produced from `polytope-labs/subql-ethereum`.
+
+Accepted: this moves substrate from the deployed node 5.9.1 to 6.4.7 (node-core 19.x), matching `polytope-labs/subql`'s main after it was synced to upstream. The fork PR is built on that main, so it carries only these behavioural changes as a single commit, not the version history.
+
 ## 2026-08-19 — The standard-amount check bounds plausibility instead of pinning one unit
 
 Chosen: `resolvePoolLeg` accepts any standard amount within a plausibility window around one whole input token, and `updateLiquidityPools` renormalizes the rate by the leg's own standard amount. The pallet is then free to raise the probe size to buy quote precision without the indexer rescaling every published rate by that factor.
